@@ -19,10 +19,8 @@ st.set_page_config(
 # 项目文件路径
 # ==================================================
 
-# 当前 streamlit_app.py 所在目录
 BASE_DIR = Path(__file__).resolve().parent
 
-# 气象数据文件
 WEATHER_DATA_FILE = BASE_DIR / "weather_data.csv"
 
 
@@ -106,7 +104,6 @@ if selected_function == "实时天气查询":
                     f"📍 {result.get('city', city)} 当前天气"
                 )
 
-                # 第一行：核心天气指标
                 col1, col2, col3, col4 = st.columns(4)
 
                 with col1:
@@ -139,7 +136,6 @@ if selected_function == "实时天气查询":
 
                 st.divider()
 
-                # 第二行：其他天气信息
                 col1, col2 = st.columns(2)
 
                 with col1:
@@ -172,7 +168,6 @@ if selected_function == "实时天气查询":
                         f"{result.get('weather_code', '--')}"
                     )
 
-                # 展示完整返回结果，便于调试
                 with st.expander("查看完整天气数据"):
 
                     st.json(result)
@@ -252,13 +247,21 @@ elif selected_function == "气象数据分析":
 
                         st.write(result)
 
-                    if isinstance(result, dict) and result.get("success"):
+                    # 兼容两种返回格式：
+                    # 1. {"success": True, ...}
+                    # 2. 直接返回统计结果，没有 success 字段
+                    analysis_success = (
+                        isinstance(result, dict)
+                        and result.get("success", True)
+                        and not result.get("error")
+                    )
+
+                    if analysis_success:
 
                         st.success("数据分析完成")
 
                         st.subheader("统计结果")
 
-                        # 尝试读取常见统计指标
                         col1, col2, col3 = st.columns(3)
 
                         with col1:
@@ -275,17 +278,77 @@ elif selected_function == "气象数据分析":
 
                             st.metric(
                                 "平均温度",
-                                f"{result.get('mean_temperature', '--')} ℃"
+                                f"{result.get('temperature_mean', '--')} ℃"
                             )
 
                         with col3:
 
                             st.metric(
                                 "平均湿度",
-                                f"{result.get('mean_humidity', '--')} %"
+                                f"{result.get('humidity_mean', '--')} %"
                             )
 
-                    elif isinstance(result, dict):
+                        st.divider()
+
+                        st.subheader("详细统计指标")
+
+                        detail_col1, detail_col2 = st.columns(2)
+
+                        with detail_col1:
+
+                            st.write(
+                                f"**开始时间：** "
+                                f"{result.get('start_time', '--')}"
+                            )
+
+                            st.write(
+                                f"**结束时间：** "
+                                f"{result.get('end_time', '--')}"
+                            )
+
+                            st.write(
+                                f"**最低温度：** "
+                                f"{result.get('temperature_min', '--')} ℃"
+                            )
+
+                            st.write(
+                                f"**最高温度：** "
+                                f"{result.get('temperature_max', '--')} ℃"
+                            )
+
+                            st.write(
+                                f"**平均温度：** "
+                                f"{result.get('temperature_mean', '--')} ℃"
+                            )
+
+                        with detail_col2:
+
+                            st.write(
+                                f"**平均湿度：** "
+                                f"{result.get('humidity_mean', '--')} %"
+                            )
+
+                            st.write(
+                                f"**平均风速：** "
+                                f"{result.get('wind_speed_mean', '--')}"
+                            )
+
+                            st.write(
+                                f"**最大风速：** "
+                                f"{result.get('wind_speed_max', '--')}"
+                            )
+
+                            st.write(
+                                f"**累计降水：** "
+                                f"{result.get('precipitation_total', '--')} mm"
+                            )
+
+                            st.write(
+                                f"**日温差平均值：** "
+                                f"{result.get('daily_temperature_range', '--')} ℃"
+                            )
+
+                    else:
 
                         st.error(
                             "数据分析失败："
@@ -295,12 +358,6 @@ elif selected_function == "气象数据分析":
                                     "工具没有返回具体错误信息。"
                                 )
                             )
-                        )
-
-                    else:
-
-                        st.error(
-                            "数据分析失败：工具返回的数据格式不是字典。"
                         )
 
                 except Exception as error:
@@ -365,11 +422,18 @@ elif selected_function == "数据质量检查":
 
                         st.write(result)
 
-                    if isinstance(result, dict) and result.get("success"):
+                    # 兼容返回结果中没有 success 字段的情况
+                    quality_success = (
+                        isinstance(result, dict)
+                        and result.get("success", True)
+                        and not result.get("error")
+                    )
+
+                    if quality_success:
 
                         st.success("质量检查完成")
 
-                    elif isinstance(result, dict):
+                    else:
 
                         st.error(
                             "数据质量检查失败："
@@ -379,13 +443,6 @@ elif selected_function == "数据质量检查":
                                     "工具没有返回具体错误信息。"
                                 )
                             )
-                        )
-
-                    else:
-
-                        st.error(
-                            "数据质量检查失败："
-                            "工具返回的数据格式不是字典。"
                         )
 
                 except Exception as error:
