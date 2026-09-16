@@ -1,11 +1,12 @@
 import streamlit as st
+from pathlib import Path
 
 from tools import TOOLS
 
 
-# =========================
+# ==================================================
 # 页面基本设置
-# =========================
+# ==================================================
 
 st.set_page_config(
     page_title="气象智能 Agent",
@@ -14,19 +15,34 @@ st.set_page_config(
 )
 
 
-# =========================
+# ==================================================
+# 项目文件路径
+# ==================================================
+
+# 当前 streamlit_app.py 所在目录
+BASE_DIR = Path(__file__).resolve().parent
+
+# 气象数据文件
+WEATHER_DATA_FILE = BASE_DIR / "weather_data.csv"
+
+
+# ==================================================
 # 页面标题
-# =========================
+# ==================================================
 
 st.title("🌤️ 气象智能 Agent")
-st.caption("实时天气查询 · 气象数据分析 · 数据质量检查")
+
+st.caption(
+    "实时天气查询 · 气象数据分析 · 数据质量检查"
+)
 
 
-# =========================
+# ==================================================
 # 侧边栏菜单
-# =========================
+# ==================================================
 
 with st.sidebar:
+
     st.header("功能菜单")
 
     selected_function = st.radio(
@@ -61,15 +77,28 @@ if selected_function == "实时天气查询":
     if query_button:
 
         if not city.strip():
+
             st.warning("请输入城市名称")
 
         else:
 
             with st.spinner("正在查询天气数据……"):
 
-                result = TOOLS["get_current_weather"](city.strip())
+                try:
 
-            if result.get("success"):
+                    result = TOOLS["get_current_weather"](
+                        city.strip()
+                    )
+
+                except Exception as error:
+
+                    st.error("天气查询时发生错误：")
+
+                    st.exception(error)
+
+                    result = None
+
+            if isinstance(result, dict) and result.get("success"):
 
                 st.success("天气查询成功")
 
@@ -81,24 +110,28 @@ if selected_function == "实时天气查询":
                 col1, col2, col3, col4 = st.columns(4)
 
                 with col1:
+
                     st.metric(
                         "当前温度",
                         f"{result.get('temperature', '--')} ℃"
                     )
 
                 with col2:
+
                     st.metric(
                         "体感温度",
                         f"{result.get('apparent_temperature', '--')} ℃"
                     )
 
                 with col3:
+
                     st.metric(
                         "相对湿度",
                         f"{result.get('relative_humidity', '--')} %"
                     )
 
                 with col4:
+
                     st.metric(
                         "风速",
                         f"{result.get('wind_speed', '--')} km/h"
@@ -110,6 +143,7 @@ if selected_function == "实时天气查询":
                 col1, col2 = st.columns(2)
 
                 with col1:
+
                     st.write(
                         f"**城市：** {result.get('city', '--')}"
                     )
@@ -123,6 +157,7 @@ if selected_function == "实时天气查询":
                     )
 
                 with col2:
+
                     st.write(
                         f"**数据时间：** {result.get('time', '--')}"
                     )
@@ -137,7 +172,12 @@ if selected_function == "实时天气查询":
                         f"{result.get('weather_code', '--')}"
                     )
 
-            else:
+                # 展示完整返回结果，便于调试
+                with st.expander("查看完整天气数据"):
+
+                    st.json(result)
+
+            elif isinstance(result, dict):
 
                 st.error(
                     result.get(
@@ -145,6 +185,16 @@ if selected_function == "实时天气查询":
                         "天气查询失败，请稍后重试。"
                     )
                 )
+
+                with st.expander("查看完整返回结果"):
+
+                    st.json(result)
+
+            elif result is not None:
+
+                st.error("天气查询返回的数据格式不正确。")
+
+                st.write(result)
 
 
 # ==================================================
@@ -166,60 +216,98 @@ elif selected_function == "气象数据分析":
 
     if analyze_button:
 
-        with st.spinner("正在分析本地气象数据……"):
+        st.write(
+            f"**数据文件路径：** `{WEATHER_DATA_FILE}`"
+        )
 
-            try:
+        st.write(
+            f"**文件是否存在：** `{WEATHER_DATA_FILE.exists()}`"
+        )
 
-                result = TOOLS["calculate_stats"](
-                    "weather_data.csv"
-                )
+        if not WEATHER_DATA_FILE.exists():
 
-                if result.get("success"):
+            st.error(
+                "找不到 weather_data.csv。"
+                "请检查该文件是否已经上传到 GitHub，"
+                "并且文件名是否完全一致。"
+            )
 
-                    st.success("数据分析完成")
+        else:
 
-                    st.subheader("统计结果")
+            with st.spinner("正在分析本地气象数据……"):
 
-                    # 尝试展示几个常见统计指标
-                    col1, col2, col3 = st.columns(3)
+                try:
 
-                    with col1:
-                        st.metric(
-                            "记录数",
-                            result.get(
-                                "record_count",
-                                result.get("count", "--")
+                    result = TOOLS["calculate_stats"](
+                        str(WEATHER_DATA_FILE)
+                    )
+
+                    st.write("**工具返回结果：**")
+
+                    if isinstance(result, dict):
+
+                        st.json(result)
+
+                    else:
+
+                        st.write(result)
+
+                    if isinstance(result, dict) and result.get("success"):
+
+                        st.success("数据分析完成")
+
+                        st.subheader("统计结果")
+
+                        # 尝试读取常见统计指标
+                        col1, col2, col3 = st.columns(3)
+
+                        with col1:
+
+                            st.metric(
+                                "记录数",
+                                result.get(
+                                    "record_count",
+                                    result.get("count", "--")
+                                )
+                            )
+
+                        with col2:
+
+                            st.metric(
+                                "平均温度",
+                                f"{result.get('mean_temperature', '--')} ℃"
+                            )
+
+                        with col3:
+
+                            st.metric(
+                                "平均湿度",
+                                f"{result.get('mean_humidity', '--')} %"
+                            )
+
+                    elif isinstance(result, dict):
+
+                        st.error(
+                            "数据分析失败："
+                            + str(
+                                result.get(
+                                    "error",
+                                    "工具没有返回具体错误信息。"
+                                )
                             )
                         )
 
-                    with col2:
-                        st.metric(
-                            "平均温度",
-                            f"{result.get('mean_temperature', '--')} ℃"
+                    else:
+
+                        st.error(
+                            "数据分析失败：工具返回的数据格式不是字典。"
                         )
 
-                    with col3:
-                        st.metric(
-                            "平均湿度",
-                            f"{result.get('mean_humidity', '--')} %"
-                        )
+                except Exception as error:
 
-                    st.json(result)
+                    st.error("数据分析时发生错误：")
 
-                else:
-
-                    st.error(
-                        result.get(
-                            "error",
-                            "数据分析失败。"
-                        )
-                    )
-
-            except Exception as error:
-
-                st.error(
-                    f"数据分析时发生错误：{error}"
-                )
+                    st.exception(error)
 
 
 # ==================================================
@@ -241,31 +329,67 @@ elif selected_function == "数据质量检查":
 
     if quality_button:
 
-        with st.spinner("正在检查数据质量……"):
+        st.write(
+            f"**数据文件路径：** `{WEATHER_DATA_FILE}`"
+        )
 
-            try:
+        st.write(
+            f"**文件是否存在：** `{WEATHER_DATA_FILE.exists()}`"
+        )
 
-                result = TOOLS["check_quality"](
-                    "weather_data.csv"
-                )
+        if not WEATHER_DATA_FILE.exists():
 
-                if result.get("success"):
+            st.error(
+                "找不到 weather_data.csv。"
+                "请检查该文件是否已经上传到 GitHub，"
+                "并且文件名是否完全一致。"
+            )
 
-                    st.success("质量检查完成")
+        else:
 
-                    st.json(result)
+            with st.spinner("正在检查数据质量……"):
 
-                else:
+                try:
 
-                    st.error(
-                        result.get(
-                            "error",
-                            "数据质量检查失败。"
-                        )
+                    result = TOOLS["check_quality"](
+                        str(WEATHER_DATA_FILE)
                     )
 
-            except Exception as error:
+                    st.write("**质量检查返回结果：**")
 
-                st.error(
-                    f"数据质量检查时发生错误：{error}"
-                )
+                    if isinstance(result, dict):
+
+                        st.json(result)
+
+                    else:
+
+                        st.write(result)
+
+                    if isinstance(result, dict) and result.get("success"):
+
+                        st.success("质量检查完成")
+
+                    elif isinstance(result, dict):
+
+                        st.error(
+                            "数据质量检查失败："
+                            + str(
+                                result.get(
+                                    "error",
+                                    "工具没有返回具体错误信息。"
+                                )
+                            )
+                        )
+
+                    else:
+
+                        st.error(
+                            "数据质量检查失败："
+                            "工具返回的数据格式不是字典。"
+                        )
+
+                except Exception as error:
+
+                    st.error("数据质量检查时发生错误：")
+
+                    st.exception(error)
