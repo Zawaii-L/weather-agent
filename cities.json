@@ -1,0 +1,142 @@
+{
+  "澳门": {
+    "name": "澳门",
+    "region": "",
+    "country": "中国澳门",
+    "latitude": 22.1987,
+    "longitude": 113.5439
+  },
+  "珠海": {
+    "name": "珠海市",
+    "region": "广东省",
+    "country": "中国",
+    "latitude": 22.2710,
+    "longitude": 113.5767
+  },
+  "珠海市": {
+    "name": "珠海市",
+    "region": "广东省",
+    "country": "中国",
+    "latitude": 22.2710,
+    "longitude": 113.5767
+  },
+  "深圳": {
+    "name": "深圳市",
+    "region": "广东省",
+    "country": "中国",
+    "latitude": 22.5431,
+    "longitude": 114.0579
+  },
+  "广州": {
+    "name": "广州市",
+    "region": "广东省",
+    "country": "中国",
+    "latitude": 23.1291,
+    "longitude": 113.2644
+  },
+  "香港": {
+    "name": "香港",
+    "region": "",
+    "country": "中国香港",
+    "latitude": 22.3193,
+    "longitude": 114.1694
+  },
+  "北京": {
+    "name": "北京市",
+    "region": "",
+    "country": "中国",
+    "latitude": 39.9042,
+    "longitude": 116.4074
+  },
+  "上海": {
+    "name": "上海市",
+    "region": "",
+    "country": "中国",
+    "latitude": 31.2304,
+    "longitude": 121.4737
+  },
+  "天津": {
+    "name": "天津市",
+    "region": "",
+    "country": "中国",
+    "latitude": 39.3434,
+    "longitude": 117.3616
+  },
+  "重庆": {
+    "name": "重庆市",
+    "region": "",
+    "country": "中国",
+    "latitude": 29.5630,
+    "longitude": 106.5516
+  },
+  "成都": {
+    "name": "成都市",
+    "region": "四川省",
+    "country": "中国",
+    "latitude": 30.5728,
+    "longitude": 104.0668
+  },
+  "杭州": {
+    "name": "杭州市",
+    "region": "浙江省",
+    "country": "中国",
+    "latitude": 30.2741,
+    "longitude": 120.1551
+  },
+  "南京": {
+    "name": "南京市",
+    "region": "江苏省",
+    "country": "中国",
+    "latitude": 32.0603,
+    "longitude": 118.7969
+  },
+  "武汉": {
+    "name": "武汉市",
+    "region": "湖北省",
+    "country": "中国",
+    "latitude": 30.5928,
+    "longitude": 114.3055
+  },
+  "西安": {
+    "name": "西安市",
+    "region": "陕西省",
+    "country": "中国",
+    "latitude": 34.3416,
+    "longitude": 108.9398
+  },
+  "厦门": {
+    "name": "厦门市",
+    "region": "福建省",
+    "country": "中国",
+    "latitude": 24.4798,
+    "longitude": 118.0894
+  },
+  "福州": {
+    "name": "福州市",
+    "region": "福建省",
+    "country": "中国",
+    "latitude": 26.0745,
+    "longitude": 119.2965
+  },
+  "新加坡": {
+    "name": "新加坡",
+    "region": "",
+    "country": "新加坡",
+    "latitude": 1.3521,
+    "longitude": 103.8198
+  },
+  "东京": {
+    "name": "东京",
+    "region": "",
+    "country": "日本",
+    "latitude": 35.6762,
+    "longitude": 139.6503
+  },
+  "首尔": {
+    "name": "首尔",
+    "region": "",
+    "country": "韩国",
+    "latitude": 37.5665,
+    "longitude": 126.9780
+  }
+}
