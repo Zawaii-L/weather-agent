@@ -1,868 +1,772 @@
-import streamlit as st
+import os
+from io import BytesIO
+
 import pandas as pd
+import requests
+import streamlit as st
+from dotenv import load_dotenv
 
-from pathlib import Path
-from datetime import date, timedelta
-
-from tools import TOOLS
-from historical_weather import fetch_historical_weather
-from weather_code import weather_code_to_chinese
+from agent import ask_weather_agent
+from forecast_weather import get_weather_forecast
 
 
-# ==================================================
-# 页面基本设置
-# ==================================================
+# =========================
+# 加载环境变量
+# =========================
+
+load_dotenv()
+
+
+# =========================
+# 页面设置
+# =========================
 
 st.set_page_config(
-    page_title="气象智能助手",
-    page_icon="🌤️",
+    page_title="翀舟气象智能助手",
+    page_icon="🌦️",
     layout="wide"
 )
 
 
-# ==================================================
-# 项目文件路径
-# ==================================================
-
-BASE_DIR = Path(__file__).resolve().parent
-
-WEATHER_DATA_FILE = BASE_DIR / "weather_data.csv"
-
-
-# ==================================================
-# 数值格式化函数
-# ==================================================
-
-def format_decimal(value, digits=1):
-    """
-    将数值格式化为指定的小数位数。
-    默认保留一位小数。
-    """
-
-    if value is None:
-        return "--"
-
-    try:
-
-        return f"{float(value):.{digits}f}"
-
-    except (TypeError, ValueError):
-
-        return str(value)
-
-
-def format_integer(value):
-    """
-    将数值格式化为整数。
-    """
-
-    if value is None:
-        return "--"
-
-    try:
-
-        return f"{int(value)}"
-
-    except (TypeError, ValueError):
-
-        return str(value)
-
-
-def round_dataframe_numbers(dataframe):
-    """
-    将 DataFrame 中所有数值列统一保留一位小数。
-    """
-
-    dataframe = dataframe.copy()
-
-    numeric_columns = dataframe.select_dtypes(
-        include="number"
-    ).columns
-
-    dataframe[numeric_columns] = dataframe[
-        numeric_columns
-    ].round(1)
-
-    return dataframe
-
-
-def get_result_value(result, *keys):
-    """
-    按顺序从结果字典中获取字段值。
-    """
-
-    for key in keys:
-
-        if key in result and result[key] is not None:
-
-            return result[key]
-
-    return None
-
-
-# ==================================================
+# =========================
 # 页面标题
-# ==================================================
+# =========================
 
-st.title("🌤️ 气象智能助手")
+st.title("🌦️ 翀舟气象智能助手")
 
 st.caption(
-    "公开气象数据采集 · 实时天气查询 · 气象数据分析 · 数据质量检查"
+    "基于大语言模型、气象数据接口和数据分析工具的自然语言气象 Agent"
 )
 
 
-# ==================================================
-# 侧边栏菜单
-# ==================================================
+# =========================
+# 侧边栏功能菜单
+# =========================
 
-with st.sidebar:
+st.sidebar.title("功能菜单")
 
-    st.header("功能菜单")
+page = st.sidebar.radio(
+    "请选择功能",
+    [
+        "自然语言气象助手",
+        "公开气象数据采集",
+        "未来天气预报",
+        "实时天气查询",
+        "气象数据分析",
+        "数据质量检查"
+    ]
+)
 
-    selected_function = st.radio(
-        "请选择功能",
-        [
-            "公开气象数据采集",
-            "实时天气查询",
-            "气象数据分析",
-            "数据质量检查"
-        ]
+
+# =========================================================
+# 功能一：自然语言气象助手
+# =========================================================
+
+if page == "自然语言气象助手":
+
+    st.header("自然语言气象助手")
+
+    st.markdown(
+        """
+你可以直接用自然语言提问，Agent 会根据问题自动判断是否需要查询天气数据。
+
+例如：
+
+- 珠海明天的天气怎么样？
+- 深圳未来三天会下雨吗？
+- 珠海明天适合进行无人机培训吗？
+- 帮我分析未来三天的风速和降水风险。
+- 澳门这几天的最高温度是多少？
+- 什么是相对湿度？
+- 雷暴天气为什么不适合无人机飞行？
+"""
     )
 
+    st.divider()
 
-# ==================================================
-# 功能一：公开气象数据采集
-# ==================================================
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-if selected_function == "公开气象数据采集":
+    # 清空聊天记录按钮
+    col1, col2 = st.columns([1, 5])
 
-    st.header("📥 公开气象数据采集")
+    with col1:
+        if st.button("清空对话"):
+            st.session_state.messages = []
+            st.rerun()
+
+    # 显示历史聊天记录
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # 自然语言输入框
+    question = st.chat_input(
+        "请输入你的气象问题……"
+    )
+
+    if question:
+
+        # 保存用户问题
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": question
+            }
+        )
+
+        # 显示用户问题
+        with st.chat_message("user"):
+            st.markdown(question)
+
+        # 调用 Agent
+        with st.chat_message("assistant"):
+
+            with st.spinner("正在理解问题并查询气象数据……"):
+
+                try:
+                    answer = ask_weather_agent(question)
+
+                    if not answer:
+                        answer = "暂时没有生成有效回答，请换一种方式提问。"
+
+                    st.markdown(answer)
+
+                except Exception as e:
+                    answer = f"运行过程中出现错误：{e}"
+                    st.error(answer)
+
+        # 保存 Agent 回答
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
+        )
+
+
+# =========================================================
+# 功能二：公开气象数据采集
+# =========================================================
+
+elif page == "公开气象数据采集":
+
+    st.header("公开气象数据采集")
 
     st.write(
-        "输入城市和日期范围，系统将自动获取公开历史气象数据，"
-        "并保存为项目中的 weather_data.csv 文件。"
-    )
-
-    st.info(
-        "数据来源：Open-Meteo 公开气象接口。"
-        "历史数据属于公开气象资料，"
-        "不等同于气象站逐小时实测数据。"
+        "通过 Open-Meteo 公开接口获取指定城市的历史或公开气象数据。"
     )
 
     city = st.text_input(
-        "城市名称",
-        value="澳门",
-        placeholder="例如：澳门、珠海、深圳、广州"
+        "请输入城市名称",
+        value="珠海",
+        key="collect_city"
     )
 
-    yesterday = date.today() - timedelta(days=1)
-
-    default_start_date = yesterday - timedelta(days=6)
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        start_date = st.date_input(
-            "开始日期",
-            value=default_start_date
-        )
-
-    with col2:
-
-        end_date = st.date_input(
-            "结束日期",
-            value=yesterday
-        )
-
-    fetch_button = st.button(
-        "获取公开气象数据",
-        type="primary"
+    start_date = st.date_input(
+        "开始日期",
+        key="collect_start_date"
     )
 
-    if fetch_button:
+    end_date = st.date_input(
+        "结束日期",
+        key="collect_end_date"
+    )
 
-        if not city.strip():
+    if st.button("开始采集数据"):
 
-            st.warning("请输入城市名称。")
-
-        elif start_date > end_date:
-
+        if start_date > end_date:
             st.error("开始日期不能晚于结束日期。")
-
         else:
 
-            with st.spinner(
-                "正在查询城市位置并获取公开气象数据……"
-            ):
+            with st.spinner("正在采集公开气象数据……"):
 
-                result = fetch_historical_weather(
-                    city=city.strip(),
-                    start_date=start_date.isoformat(),
-                    end_date=end_date.isoformat(),
-                    output_file=str(WEATHER_DATA_FILE)
-                )
-
-            if result.get("success"):
-
-                st.success(
-                    "公开气象数据获取成功，已保存为 weather_data.csv。"
-                )
-
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-
-                    st.metric(
-                        "城市",
-                        result.get("city", city)
+                try:
+                    geocoding_response = requests.get(
+                        "https://geocoding-api.open-meteo.com/v1/search",
+                        params={
+                            "name": city,
+                            "count": 1,
+                            "language": "zh",
+                            "format": "json"
+                        },
+                        timeout=20
                     )
 
-                with col2:
+                    geocoding_response.raise_for_status()
 
-                    st.metric(
-                        "数据记录数",
-                        format_integer(
-                            result.get("record_count")
-                        )
-                    )
+                    geocoding_data = geocoding_response.json()
+                    results = geocoding_data.get("results", [])
 
-                with col3:
+                    if not results:
+                        st.error(f"没有找到城市：{city}")
+                    else:
 
-                    st.metric(
-                        "时区",
-                        result.get("timezone", "--")
-                    )
+                        location = results[0]
 
-                st.write(
-                    f"**地理坐标：** "
-                    f"{format_decimal(result.get('latitude'), 4)}, "
-                    f"{format_decimal(result.get('longitude'), 4)}"
-                )
+                        latitude = location["latitude"]
+                        longitude = location["longitude"]
 
-                st.write(
-                    f"**数据日期范围：** "
-                    f"{result.get('start_date', '--')} 至 "
-                    f"{result.get('end_date', '--')}"
-                )
-
-                st.subheader("数据预览")
-
-                dataframe = result.get("data")
-
-                if dataframe is not None:
-
-                    preview_dataframe = round_dataframe_numbers(
-                        dataframe.head(20)
-                    )
-
-                    st.dataframe(
-                        preview_dataframe,
-                        use_container_width=True
-                    )
-
-                    st.caption(
-                        "上方表格仅展示前20条记录，"
-                        "数值统一保留一位小数。"
-                    )
-
-                    st.write(
-                        f"**实际保存记录数：** "
-                        f"{format_integer(len(dataframe))} 条"
-                    )
-
-                    if "time" in dataframe.columns:
-
-                        time_values = pd.to_datetime(
-                            dataframe["time"],
-                            errors="coerce"
-                        ).dropna()
-
-                        if not time_values.empty:
-
-                            st.write(
-                                f"**实际数据开始时间：** "
-                                f"{time_values.min()}"
-                            )
-
-                            st.write(
-                                f"**实际数据结束时间：** "
-                                f"{time_values.max()}"
-                            )
-
-                    # 每日数据记录数
-                    if "time" in dataframe.columns:
-
-                        daily_dataframe = dataframe.copy()
-
-                        daily_dataframe["日期"] = (
-                            pd.to_datetime(
-                                daily_dataframe["time"],
-                                errors="coerce"
-                            ).dt.date
+                        archive_url = (
+                            "https://archive-api.open-meteo.com/v1/archive"
                         )
 
-                        daily_summary = (
-                            daily_dataframe
-                            .groupby("日期")
-                            .size()
-                            .reset_index(name="记录数")
+                        response = requests.get(
+                            archive_url,
+                            params={
+                                "latitude": latitude,
+                                "longitude": longitude,
+                                "start_date": str(start_date),
+                                "end_date": str(end_date),
+                                "timezone": "auto",
+                                "daily": ",".join(
+                                    [
+                                        "temperature_2m_max",
+                                        "temperature_2m_min",
+                                        "temperature_2m_mean",
+                                        "precipitation_sum",
+                                        "rain_sum",
+                                        "snowfall_sum",
+                                        "wind_speed_10m_max",
+                                        "wind_gusts_10m_max",
+                                        "relative_humidity_2m_mean",
+                                        "sunrise",
+                                        "sunset"
+                                    ]
+                                )
+                            },
+                            timeout=30
                         )
 
-                        st.subheader("每日数据记录数")
+                        response.raise_for_status()
+
+                        weather_data = response.json()
+                        daily_data = weather_data.get("daily", {})
+
+                        df = pd.DataFrame(
+                            {
+                                "日期": daily_data.get("time", []),
+                                "最高温度": daily_data.get(
+                                    "temperature_2m_max", []
+                                ),
+                                "最低温度": daily_data.get(
+                                    "temperature_2m_min", []
+                                ),
+                                "平均温度": daily_data.get(
+                                    "temperature_2m_mean", []
+                                ),
+                                "降水量": daily_data.get(
+                                    "precipitation_sum", []
+                                ),
+                                "降雨量": daily_data.get(
+                                    "rain_sum", []
+                                ),
+                                "降雪量": daily_data.get(
+                                    "snowfall_sum", []
+                                ),
+                                "最大风速": daily_data.get(
+                                    "wind_speed_10m_max", []
+                                ),
+                                "最大阵风": daily_data.get(
+                                    "wind_gusts_10m_max", []
+                                ),
+                                "平均相对湿度": daily_data.get(
+                                    "relative_humidity_2m_mean", []
+                                ),
+                                "日出时间": daily_data.get(
+                                    "sunrise", []
+                                ),
+                                "日落时间": daily_data.get(
+                                    "sunset", []
+                                )
+                            }
+                        )
+
+                        numeric_columns = [
+                            "最高温度",
+                            "最低温度",
+                            "平均温度",
+                            "降水量",
+                            "降雨量",
+                            "降雪量",
+                            "最大风速",
+                            "最大阵风",
+                            "平均相对湿度"
+                        ]
+
+                        for column in numeric_columns:
+                            if column in df.columns:
+                                df[column] = pd.to_numeric(
+                                    df[column],
+                                    errors="coerce"
+                                ).round(1)
+
+                        st.success(
+                            f"成功获取 {len(df)} 条气象数据。"
+                        )
 
                         st.dataframe(
-                            daily_summary,
+                            df,
                             use_container_width=True
                         )
 
-                    # 下载完整 CSV
-                    csv_data = dataframe.to_csv(
+                        csv_data = df.to_csv(
+                            index=False,
+                            encoding="utf-8-sig"
+                        )
+
+                        st.download_button(
+                            label="下载 CSV 文件",
+                            data=csv_data,
+                            file_name=(
+                                f"{city}_{start_date}_{end_date}_气象数据.csv"
+                            ),
+                            mime="text/csv"
+                        )
+
+                except Exception as e:
+                    st.error(f"数据采集失败：{e}")
+
+
+# =========================================================
+# 功能三：未来天气预报
+# =========================================================
+
+elif page == "未来天气预报":
+
+    st.header("未来天气预报")
+
+    city = st.text_input(
+        "请输入城市名称",
+        value="珠海",
+        key="forecast_city"
+    )
+
+    forecast_days = st.slider(
+        "预报天数",
+        min_value=1,
+        max_value=16,
+        value=3,
+        step=1
+    )
+
+    if st.button("查询未来天气"):
+
+        with st.spinner("正在获取天气预报……"):
+
+            try:
+                result = get_weather_forecast(
+                    city=city,
+                    forecast_days=forecast_days
+                )
+
+                if result is None:
+                    st.error(
+                        f"没有找到城市“{city}”的天气数据。"
+                    )
+                else:
+
+                    location = result["location"]
+                    daily_df = result["daily"]
+                    hourly_df = result["hourly"]
+
+                    st.success(
+                        f"已获取 {location.get('name', city)} "
+                        f"未来 {forecast_days} 天的天气预报。"
+                    )
+
+                    st.subheader("城市信息")
+
+                    st.write(
+                        f"城市：{location.get('name', city)}"
+                    )
+
+                    if location.get("country"):
+                        st.write(
+                            f"国家或地区：{location['country']}"
+                        )
+
+                    if location.get("admin1"):
+                        st.write(
+                            f"行政区域：{location['admin1']}"
+                        )
+
+                    st.write(
+                        f"纬度：{float(location['latitude']):.1f}"
+                    )
+
+                    st.write(
+                        f"经度：{float(location['longitude']):.1f}"
+                    )
+
+                    st.divider()
+
+                    st.subheader("每日天气预报")
+
+                    st.dataframe(
+                        daily_df,
+                        use_container_width=True
+                    )
+
+                    st.subheader("每小时天气预报")
+
+                    st.dataframe(
+                        hourly_df,
+                        use_container_width=True
+                    )
+
+                    daily_csv = daily_df.to_csv(
                         index=False,
                         encoding="utf-8-sig"
                     )
 
-                    st.download_button(
-                        label="下载完整气象数据 CSV",
-                        data=csv_data,
-                        file_name="weather_data.csv",
-                        mime="text/csv"
+                    hourly_csv = hourly_df.to_csv(
+                        index=False,
+                        encoding="utf-8-sig"
                     )
 
-                st.info(
-                    "完整数据已经保存。"
-                    "你可以进入“气象数据分析”或“数据质量检查”继续处理。"
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.download_button(
+                            label="下载每日预报 CSV",
+                            data=daily_csv,
+                            file_name=f"{city}_每日天气预报.csv",
+                            mime="text/csv"
+                        )
+
+                    with col2:
+                        st.download_button(
+                            label="下载每小时预报 CSV",
+                            data=hourly_csv,
+                            file_name=f"{city}_每小时天气预报.csv",
+                            mime="text/csv"
+                        )
+
+            except Exception as e:
+                st.error(f"天气预报获取失败：{e}")
+
+
+# =========================================================
+# 功能四：实时天气查询
+# =========================================================
+
+elif page == "实时天气查询":
+
+    st.header("实时天气查询")
+
+    city = st.text_input(
+        "请输入城市名称",
+        value="珠海",
+        key="current_city"
+    )
+
+    if st.button("查询实时天气"):
+
+        with st.spinner("正在获取实时天气……"):
+
+            try:
+                geocoding_response = requests.get(
+                    "https://geocoding-api.open-meteo.com/v1/search",
+                    params={
+                        "name": city,
+                        "count": 1,
+                        "language": "zh",
+                        "format": "json"
+                    },
+                    timeout=20
+                )
+
+                geocoding_response.raise_for_status()
+
+                geocoding_data = geocoding_response.json()
+                results = geocoding_data.get("results", [])
+
+                if not results:
+                    st.error(f"没有找到城市：{city}")
+                else:
+
+                    location = results[0]
+
+                    latitude = location["latitude"]
+                    longitude = location["longitude"]
+
+                    response = requests.get(
+                        "https://api.open-meteo.com/v1/forecast",
+                        params={
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "current": ",".join(
+                                [
+                                    "temperature_2m",
+                                    "relative_humidity_2m",
+                                    "apparent_temperature",
+                                    "is_day",
+                                    "precipitation",
+                                    "rain",
+                                    "weather_code",
+                                    "cloud_cover",
+                                    "pressure_msl",
+                                    "surface_pressure",
+                                    "wind_speed_10m",
+                                    "wind_direction_10m",
+                                    "wind_gusts_10m"
+                                ]
+                            ),
+                            "timezone": "auto"
+                        },
+                        timeout=30
+                    )
+
+                    response.raise_for_status()
+
+                    data = response.json()
+                    current = data.get("current", {})
+
+                    st.success(
+                        f"已获取 {location.get('name', city)} 的实时天气。"
+                    )
+
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        st.metric(
+                            "当前温度",
+                            f"{float(current.get('temperature_2m', 0)):.1f} °C"
+                        )
+
+                    with col2:
+                        st.metric(
+                            "体感温度",
+                            f"{float(current.get('apparent_temperature', 0)):.1f} °C"
+                        )
+
+                    with col3:
+                        st.metric(
+                            "相对湿度",
+                            f"{float(current.get('relative_humidity_2m', 0)):.1f} %"
+                        )
+
+                    current_table = pd.DataFrame(
+                        {
+                            "项目": [
+                                "降水量",
+                                "降雨量",
+                                "天气代码",
+                                "云量",
+                                "海平面气压",
+                                "地面气压",
+                                "风速",
+                                "风向",
+                                "阵风"
+                            ],
+                            "数值": [
+                                f"{float(current.get('precipitation', 0)):.1f}",
+                                f"{float(current.get('rain', 0)):.1f}",
+                                current.get("weather_code", "未知"),
+                                f"{float(current.get('cloud_cover', 0)):.1f}",
+                                f"{float(current.get('pressure_msl', 0)):.1f}",
+                                f"{float(current.get('surface_pressure', 0)):.1f}",
+                                f"{float(current.get('wind_speed_10m', 0)):.1f}",
+                                f"{float(current.get('wind_direction_10m', 0)):.1f}",
+                                f"{float(current.get('wind_gusts_10m', 0)):.1f}"
+                            ]
+                        }
+                    )
+
+                    st.dataframe(
+                        current_table,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+            except Exception as e:
+                st.error(f"实时天气查询失败：{e}")
+
+
+# =========================================================
+# 功能五：气象数据分析
+# =========================================================
+
+elif page == "气象数据分析":
+
+    st.header("气象数据分析")
+
+    uploaded_file = st.file_uploader(
+        "请上传 CSV 气象数据文件",
+        type=["csv"]
+    )
+
+    if uploaded_file is not None:
+
+        try:
+            df = pd.read_csv(uploaded_file)
+
+            st.subheader("数据预览")
+
+            st.dataframe(
+                df.head(20),
+                use_container_width=True
+            )
+
+            st.subheader("数据基本信息")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.metric(
+                    "数据行数",
+                    f"{len(df):.1f}"
+                )
+
+            with col2:
+                st.metric(
+                    "数据列数",
+                    f"{len(df.columns):.1f}"
+                )
+
+            with col3:
+                st.metric(
+                    "缺失值总数",
+                    f"{int(df.isnull().sum().sum()):.1f}"
+                )
+
+            numeric_df = df.select_dtypes(
+                include="number"
+            )
+
+            if not numeric_df.empty:
+
+                st.subheader("数值型数据统计")
+
+                st.dataframe(
+                    numeric_df.describe().round(1),
+                    use_container_width=True
+                )
+
+                selected_column = st.selectbox(
+                    "请选择需要绘图的数值列",
+                    numeric_df.columns
+                )
+
+                st.subheader(
+                    f"{selected_column} 变化趋势"
+                )
+
+                st.line_chart(
+                    numeric_df[selected_column]
                 )
 
             else:
-
-                st.error(
-                    result.get(
-                        "error",
-                        "公开气象数据获取失败。"
-                    )
+                st.info(
+                    "当前文件没有检测到数值型字段。"
                 )
 
+        except Exception as e:
+            st.error(f"数据分析失败：{e}")
 
-# ==================================================
-# 功能二：实时天气查询
-# ==================================================
 
-elif selected_function == "实时天气查询":
+# =========================================================
+# 功能六：数据质量检查
+# =========================================================
 
-    st.header("📍 实时天气查询")
+elif page == "数据质量检查":
 
-    st.write(
-        "输入城市名称，系统将自动查询该城市的当前天气情况。"
+    st.header("数据质量检查")
+
+    uploaded_file = st.file_uploader(
+        "请上传需要检查的 CSV 文件",
+        type=["csv"],
+        key="quality_file"
     )
 
-    city = st.text_input(
-        "城市名称",
-        value="澳门",
-        placeholder="例如：澳门、珠海、深圳、广州"
-    )
+    if uploaded_file is not None:
 
-    query_button = st.button(
-        "查询当前天气",
-        type="primary"
-    )
+        try:
+            df = pd.read_csv(uploaded_file)
 
-    if query_button:
+            st.subheader("数据预览")
 
-        if not city.strip():
-
-            st.warning("请输入城市名称。")
-
-        else:
-
-            with st.spinner("正在查询当前天气……"):
-
-                try:
-
-                    result = TOOLS["get_current_weather"](
-                        city.strip()
-                    )
-
-                except Exception as error:
-
-                    st.error(
-                        "实时天气查询时发生错误。"
-                    )
-
-                    st.exception(error)
-
-                    result = None
-
-            if isinstance(result, dict) and result.get("success"):
-
-                st.success("实时天气查询成功。")
-
-                st.subheader(
-                    f"📍 {result.get('city', city)} 当前天气"
-                )
-
-                col1, col2, col3, col4 = st.columns(4)
-
-                with col1:
-
-                    st.metric(
-                        "当前温度",
-                        f"{format_decimal(result.get('temperature'))} ℃"
-                    )
-
-                with col2:
-
-                    st.metric(
-                        "体感温度",
-                        f"{format_decimal(result.get('apparent_temperature'))} ℃"
-                    )
-
-                with col3:
-
-                    humidity = get_result_value(
-                        result,
-                        "relative_humidity",
-                        "humidity"
-                    )
-
-                    st.metric(
-                        "相对湿度",
-                        f"{format_decimal(humidity)} %"
-                    )
-
-                with col4:
-
-                    st.metric(
-                        "风速",
-                        f"{format_decimal(result.get('wind_speed'))} km/h"
-                    )
-
-                st.divider()
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-
-                    st.write(
-                        f"**城市：** {result.get('city', '--')}"
-                    )
-
-                    st.write(
-                        f"**地区：** {result.get('region', '--')}"
-                    )
-
-                    st.write(
-                        f"**国家或地区：** {result.get('country', '--')}"
-                    )
-
-                with col2:
-
-                    st.write(
-                        f"**数据时间：** {result.get('time', '--')}"
-                    )
-
-                    st.write(
-                        f"**当前降水：** "
-                        f"{format_decimal(result.get('precipitation'))} mm"
-                    )
-
-                    weather_code = result.get(
-                        "weather_code"
-                    )
-
-                    st.write(
-                        f"**天气代码：** "
-                        f"{weather_code if weather_code is not None else '--'}"
-                    )
-
-                    st.write(
-                        f"**天气状况：** "
-                        f"{weather_code_to_chinese(weather_code)}"
-                    )
-
-                with st.expander("查看完整天气数据"):
-
-                    st.json(result)
-
-            elif isinstance(result, dict):
-
-                st.error(
-                    result.get(
-                        "error",
-                        "实时天气查询失败，请稍后重试。"
-                    )
-                )
-
-                with st.expander("查看完整返回结果"):
-
-                    st.json(result)
-
-            elif result is not None:
-
-                st.error(
-                    "天气查询返回的数据格式不正确。"
-                )
-
-                st.write(result)
-
-
-# ==================================================
-# 功能三：气象数据分析
-# ==================================================
-
-elif selected_function == "气象数据分析":
-
-    st.header("📊 气象数据分析")
-
-    st.write(
-        "该模块分析通过公开气象接口获取并保存的 weather_data.csv 文件。"
-    )
-
-    analyze_button = st.button(
-        "开始分析",
-        type="primary"
-    )
-
-    if analyze_button:
-
-        st.write(
-            f"**数据文件路径：** `{WEATHER_DATA_FILE}`"
-        )
-
-        st.write(
-            f"**文件是否存在：** `{WEATHER_DATA_FILE.exists()}`"
-        )
-
-        if not WEATHER_DATA_FILE.exists():
-
-            st.error(
-                "当前还没有 weather_data.csv。"
-                "请先进入“公开气象数据采集”获取数据。"
+            st.dataframe(
+                df.head(20),
+                use_container_width=True
             )
 
-        else:
-
-            with st.spinner("正在分析气象数据……"):
-
-                try:
-
-                    result = TOOLS["calculate_stats"](
-                        str(WEATHER_DATA_FILE)
-                    )
-
-                    analysis_success = (
-                        isinstance(result, dict)
-                        and result.get("success", True)
-                        and not result.get("error")
-                    )
-
-                    if analysis_success:
-
-                        st.success(
-                            "气象数据分析完成。"
-                        )
-
-                        st.subheader("主要统计指标")
-
-                        col1, col2, col3 = st.columns(3)
-
-                        record_count = get_result_value(
-                            result,
-                            "record_count",
-                            "count"
-                        )
-
-                        temperature_mean = get_result_value(
-                            result,
-                            "temperature_mean",
-                            "mean_temperature"
-                        )
-
-                        humidity_mean = get_result_value(
-                            result,
-                            "humidity_mean",
-                            "mean_humidity"
-                        )
-
-                        with col1:
-
-                            st.metric(
-                                "记录数量",
-                                format_integer(record_count)
-                            )
-
-                        with col2:
-
-                            st.metric(
-                                "平均温度",
-                                f"{format_decimal(temperature_mean)} ℃"
-                            )
-
-                        with col3:
-
-                            st.metric(
-                                "平均湿度",
-                                f"{format_decimal(humidity_mean)} %"
-                            )
-
-                        st.divider()
-
-                        st.subheader("详细统计结果")
-
-                        detail_col1, detail_col2 = st.columns(2)
-
-                        with detail_col1:
-
-                            st.write(
-                                f"**数据开始时间：** "
-                                f"{result.get('start_time', '--')}"
-                            )
-
-                            st.write(
-                                f"**数据结束时间：** "
-                                f"{result.get('end_time', '--')}"
-                            )
-
-                            st.write(
-                                f"**最低温度：** "
-                                f"{format_decimal(result.get('temperature_min'))} ℃"
-                            )
-
-                            st.write(
-                                f"**最高温度：** "
-                                f"{format_decimal(result.get('temperature_max'))} ℃"
-                            )
-
-                            st.write(
-                                f"**平均温度：** "
-                                f"{format_decimal(temperature_mean)} ℃"
-                            )
-
-                        with detail_col2:
-
-                            st.write(
-                                f"**平均湿度：** "
-                                f"{format_decimal(humidity_mean)} %"
-                            )
-
-                            st.write(
-                                f"**平均风速：** "
-                                f"{format_decimal(result.get('wind_speed_mean'))} km/h"
-                            )
-
-                            st.write(
-                                f"**最大风速：** "
-                                f"{format_decimal(result.get('wind_speed_max'))} km/h"
-                            )
-
-                            st.write(
-                                f"**累计降水量：** "
-                                f"{format_decimal(result.get('precipitation_total'))} mm"
-                            )
-
-                            st.write(
-                                f"**平均日温差：** "
-                                f"{format_decimal(result.get('daily_temperature_range'))} ℃"
-                            )
-
-                        # ==================================================
-                        # 天气状况统计
-                        # ==================================================
-
-                        st.subheader("天气状况统计")
-
-                        try:
-
-                            weather_dataframe = pd.read_csv(
-                                WEATHER_DATA_FILE
-                            )
-
-                            if "weather_code" in weather_dataframe.columns:
-
-                                weather_dataframe[
-                                    "weather_description"
-                                ] = weather_dataframe[
-                                    "weather_code"
-                                ].apply(
-                                    weather_code_to_chinese
-                                )
-
-                                weather_summary = (
-                                    weather_dataframe[
-                                        "weather_description"
-                                    ]
-                                    .value_counts()
-                                    .rename_axis("天气状况")
-                                    .reset_index(
-                                        name="出现次数"
-                                    )
-                                )
-
-                                st.dataframe(
-                                    weather_summary,
-                                    use_container_width=True
-                                )
-
-                            else:
-
-                                st.info(
-                                    "当前数据中没有天气代码字段。"
-                                )
-
-                        except Exception as error:
-
-                            st.warning(
-                                f"天气状况统计展示失败：{error}"
-                            )
-
-                        # ==================================================
-                        # 完整分析结果
-                        # ==================================================
-
-                        with st.expander("查看完整分析结果"):
-
-                            display_result = result.copy()
-
-                            decimal_fields = [
-                                "temperature_mean",
-                                "temperature_max",
-                                "temperature_min",
-                                "humidity_mean",
-                                "wind_speed_mean",
-                                "wind_speed_max",
-                                "precipitation_total",
-                                "daily_temperature_range"
-                            ]
-
-                            for field in decimal_fields:
-
-                                if field in display_result:
-
-                                    value = display_result[field]
-
-                                    if isinstance(
-                                        value,
-                                        (int, float)
-                                    ):
-
-                                        display_result[field] = round(
-                                            value,
-                                            1
-                                        )
-
-                            st.json(display_result)
-
-                    else:
-
-                        st.error(
-                            "气象数据分析失败："
-                            + str(
-                                result.get(
-                                    "error",
-                                    "工具没有返回具体错误信息。"
-                                )
-                            )
-                        )
-
-                        with st.expander("查看工具返回结果"):
-
-                            st.json(result)
-
-                except Exception as error:
-
-                    st.error(
-                        "气象数据分析时发生错误。"
-                    )
-
-                    st.exception(error)
-
-
-# ==================================================
-# 功能四：数据质量检查
-# ==================================================
-
-elif selected_function == "数据质量检查":
-
-    st.header("🔍 数据质量检查")
-
-    st.write(
-        "检查气象数据中的缺失值、重复记录、异常数值和时间连续性。"
-    )
-
-    quality_button = st.button(
-        "检查数据质量",
-        type="primary"
-    )
-
-    if quality_button:
-
-        st.write(
-            f"**数据文件路径：** `{WEATHER_DATA_FILE}`"
-        )
-
-        st.write(
-            f"**文件是否存在：** `{WEATHER_DATA_FILE.exists()}`"
-        )
-
-        if not WEATHER_DATA_FILE.exists():
-
-            st.error(
-                "当前还没有 weather_data.csv。"
-                "请先进入“公开气象数据采集”获取数据。"
+            missing_values = df.isnull().sum()
+            duplicate_count = int(df.duplicated().sum())
+
+            quality_df = pd.DataFrame(
+                {
+                    "字段名称": df.columns,
+                    "数据类型": [
+                        str(df[column].dtype)
+                        for column in df.columns
+                    ],
+                    "缺失值数量": [
+                        int(missing_values[column])
+                        for column in df.columns
+                    ],
+                    "缺失值比例": [
+                        round(
+                            float(missing_values[column] / len(df) * 100),
+                            1
+                        ) if len(df) > 0 else 0.0
+                        for column in df.columns
+                    ],
+                    "唯一值数量": [
+                        int(df[column].nunique())
+                        for column in df.columns
+                    ]
+                }
             )
 
-        else:
+            st.subheader("字段质量检查结果")
 
-            with st.spinner("正在检查气象数据质量……"):
+            st.dataframe(
+                quality_df,
+                use_container_width=True,
+                hide_index=True
+            )
 
-                try:
+            st.subheader("整体质量概况")
 
-                    result = TOOLS["check_quality"](
-                        str(WEATHER_DATA_FILE)
-                    )
+            col1, col2, col3 = st.columns(3)
 
-                    quality_success = (
-                        isinstance(result, dict)
-                        and result.get("success", True)
-                        and not result.get("error")
-                    )
+            with col1:
+                st.metric(
+                    "数据行数",
+                    f"{len(df):.1f}"
+                )
 
-                    if quality_success:
+            with col2:
+                st.metric(
+                    "重复行数量",
+                    f"{duplicate_count:.1f}"
+                )
 
-                        st.success(
-                            "数据质量检查完成。"
-                        )
+            with col3:
+                st.metric(
+                    "缺失值总数",
+                    f"{int(missing_values.sum()):.1f}"
+                )
 
-                        st.subheader("质量检查结果")
+            if duplicate_count > 0:
+                st.warning(
+                    f"检测到 {duplicate_count} 行重复数据。"
+                )
+            else:
+                st.success(
+                    "没有检测到重复行。"
+                )
 
-                        if isinstance(result, dict):
+            if int(missing_values.sum()) > 0:
+                st.warning(
+                    "数据中存在缺失值，建议进一步处理。"
+                )
+            else:
+                st.success(
+                    "没有检测到缺失值。"
+                )
 
-                            st.json(result)
-
-                        else:
-
-                            st.write(result)
-
-                    else:
-
-                        st.error(
-                            "数据质量检查失败："
-                            + str(
-                                result.get(
-                                    "error",
-                                    "工具没有返回具体错误信息。"
-                                )
-                            )
-                        )
-
-                        with st.expander("查看工具返回结果"):
-
-                            st.json(result)
-
-                except Exception as error:
-
-                    st.error(
-                        "数据质量检查时发生错误。"
-                    )
-
-                    st.exception(error)
+        except Exception as e:
+            st.error(f"数据质量检查失败：{e}")
